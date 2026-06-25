@@ -1,0 +1,161 @@
+.\" Manpage for shado.
+.TH SHADO 1 "2026-06-25" "shado 0.1" "Shadow Workspace Manager"
+.SH NAME
+shado \- instant copy\-on\-write workspaces for very large projects
+.SH SYNOPSIS
+.B shado
+.I command
+.RI [ subcommand ]
+.RI [ options ]
+.SH DESCRIPTION
+.B shado
+makes huge project trees (0.5\(en1\ TB game/Perforce/monorepo checkouts)
+practical to work on in parallel. It takes one already\-warm folder, freezes
+its contents into a read\-only
+.IR base ,
+and then hands out any number of
+.I shadow
+folders \(em writable copy\-on\-write views of that base. Each shadow inherits the
+entire warm tree instantly and stores only its own changes, so a fresh,
+build\-ready workspace costs seconds and tens of megabytes instead of a full
+re\-sync and a cold rebuild.
+.PP
+.B shado
+never \(lqwarms\(rq anything itself \(em it does not run version\-control syncs,
+engine imports, cooks, or builds, because what \(lqwarm\(rq means differs for every
+project. You produce a warm folder; shado does the copy\-on\-write around it.
+.SH CONCEPTS
+.TP
+.B base
+The frozen, read\-only snapshot of a warm folder. Stored once; shared by every
+shadow.
+.TP
+.B shadow
+A writable copy\-on\-write child of a base, surfaced as an ordinary folder. Reads
+fall through to the base; writes land only in the shadow.
+.TP
+.B main
+The shadow you keep working in and re\-warm over time; the source for
+.BR "shado recache" .
+.SH COMMANDS
+.TP
+.B shado create \fI<warm-folder>\fR [--name \fIN\fR] [--count \fIC\fR] [--size-gb \fIG\fR]
+Freeze
+.I <warm-folder>
+into a new base and create an initial set of shadow folders (a
+.I main
+plus
+.I C
+slots). This is the one\-time setup.
+.TP
+.B shado recache [--name \fIN\fR] [--force]
+Rebuild the base from the re\-warmed
+.I main
+shadow, then recreate every shadow fresh on top of it. Fails if any shadow
+.I other than
+the base has uncommitted changes, unless
+.B --force
+is given (changes in those shadows are discarded \(em commit or shelve them via
+your version\-control system first).
+.TP
+.B shado restore [--name \fIN\fR]
+Remove all shadows and flatten the base back into an ordinary folder on normal
+disk. The inverse of
+.BR create .
+.TP
+.B shado clone create [--name \fIN\fR] --slot \fIS\fR [--hook \fICMD\fR]
+Add one more shadow off the base. With
+.BR --hook ,
+run
+.I CMD
+once after mount (e.g. a Perforce \fBp4 flush\fR or a \fBgit checkout\fR) \(em
+shado passes the mount path; it never warms.
+.TP
+.B shado clone reset [--name \fIN\fR] --slot \fIS\fR
+Discard a single shadow's changes and recreate it clean on the current base \(em
+an instant, fully\fIwarm\fR clean slot (unlike a version\-control clean, which
+deletes warm caches and forces a cold rebuild).
+.TP
+.B shado clone park [--name \fIN\fR] --slot \fIS\fR
+Close a shadow without losing work: unmount it but keep its delta. Resume later.
+.TP
+.B shado clone resume [--name \fIN\fR] --slot \fIS\fR
+Re\-mount a parked shadow exactly as it was.
+.TP
+.B shado clone rm [--name \fIN\fR] --slot \fIS\fR [--force]
+Unmount and delete one shadow.
+.B --force
+discards uncommitted changes.
+.TP
+.B shado ls
+List bases and shadows with their mounts and delta sizes.
+.TP
+.B shado doctor
+Check the environment (privileges, copy\-on\-write backend, store location).
+.TP
+.B shado version
+Print the version.
+.SH BACKENDS
+The command surface is identical on every platform; only the copy\-on\-write
+mechanism differs:
+.TP
+.B Windows
+Differencing VHDX disks (one read\-only parent + per\-shadow children), via the
+VirtDisk API. Privileged operations require elevation.
+.TP
+.B macOS
+APFS
+.B clonefile
+copy\-on\-write clones.
+.TP
+.B Linux
+btrfs / XFS
+.B reflink
+copies (\fBcp --reflink\fR) or overlayfs.
+.SH FILES
+.TP
+.B $SHADO_HOME
+Base store and registry. Defaults to
+.B %ProgramData%\\shado
+on Windows and
+.B ~/.local/share/shado
+on macOS/Linux.
+.SH EXAMPLES
+.PP
+Set up eight warm shadows from a synced+built Unreal tree:
+.PP
+.RS
+.nf
+shado create D:\\Game\\Main --name game --count 8
+.fi
+.RE
+.PP
+Get a clean warm slot back instantly after a bad run:
+.PP
+.RS
+.nf
+shado clone reset --name game --slot 3
+.fi
+.RE
+.PP
+Re\-warm the main shadow, then refresh every slot from it:
+.PP
+.RS
+.nf
+# (you sync + build the main shadow yourself)
+shado recache --name game
+.fi
+.RE
+.SH EXIT STATUS
+.B 0
+on success, non\-zero on error.
+.SH SEE ALSO
+PopBot \(em the multi\-agent coding tool shado provides warm slots for:
+.UR https://github.com/popbot-ai/popbot-ai
+.UE
+.SH AUTHOR
+Proof of Play, Inc.
+.SH BUGS
+Report issues at
+.UR https://github.com/popbot-ai/shado/issues
+.UE

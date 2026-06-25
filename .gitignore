@@ -1,0 +1,24 @@
+# shado runtime state (never commit local VHDX stores or registry)
+store/
+*.vhdx
+*.vhd
+registry.json
+
+# build output
+/shado
+/shado.exe
+*.exe
+dist/
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# logs / scratch
+*.log
+scratch/
+tmp/
