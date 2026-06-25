@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -106,14 +107,16 @@ func cmdCreate(f flags, pos []string) {
 	if sizeGB == 0 {
 		sizeGB = float64(dirSizeBytes(warm))/float64(1<<30)*1.4 + 2 // content * 1.4 + headroom
 	}
+	sizeGB = math.Ceil(sizeGB)             // whole GB => MB-aligned, valid for New-VHD
+	sizeBytes := int64(sizeGB) * (1 << 30) // virtual max; dynamic VHDX only allocates what's used
 	baseVhdx := filepath.Join(storeDir(), name+"-base.vhdx")
 	if fileExists(baseVhdx) {
 		fail("%s already on disk", baseVhdx)
 	}
 
-	info("creating base for %q (%.1f GB) from %s", name, sizeGB, warm)
+	info("creating base for %q (%.0f GB max) from %s", name, sizeGB, warm)
 	baseBuild := filepath.Join(storeDir(), "_build-"+name)
-	must(vhdxCreateBase(baseVhdx, sizeGB, "shado-"+name, baseBuild))
+	must(vhdxCreateBase(baseVhdx, sizeBytes, "shado-"+name, baseBuild))
 	info("copying warm folder into base ...")
 	must(robocopyMirror(warm, baseBuild))
 	info("freezing base read-only")

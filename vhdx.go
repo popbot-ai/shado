@@ -42,16 +42,16 @@ func hyperVAvailable() bool {
 
 // vhdxCreateBase creates a dynamic VHDX, mounts it WITHOUT a drive letter (so no
 // AutoPlay popup), GPT-inits, formats NTFS, and attaches it at the given folder.
-func vhdxCreateBase(path string, sizeGB float64, label, folder string) error {
+func vhdxCreateBase(path string, sizeBytes int64, label, folder string) error {
 	script := fmt.Sprintf(`$ErrorActionPreference='Stop'
-New-VHD -Path '%s' -Dynamic -SizeBytes ([int64](%f * 1GB)) | Out-Null
+New-VHD -Path '%s' -Dynamic -SizeBytes %d | Out-Null
 $d = Mount-VHD -Path '%s' -NoDriveLetter -Passthru | Get-Disk
 Initialize-Disk -Number $d.Number -PartitionStyle GPT | Out-Null
 $p = New-Partition -DiskNumber $d.Number -UseMaximumSize
 Format-Volume -Partition $p -FileSystem NTFS -NewFileSystemLabel '%s' -Confirm:$false | Out-Null
 New-Item -ItemType Directory -Path '%s' -Force | Out-Null
 Add-PartitionAccessPath -DiskNumber $d.Number -PartitionNumber $p.PartitionNumber -AccessPath '%s'
-Write-Output 'MOUNTOK'`, path, sizeGB, path, label, folder, folder)
+Write-Output 'MOUNTOK'`, path, sizeBytes, path, label, folder, folder)
 	out, err := runPS(script)
 	if err != nil || !strings.Contains(out, "MOUNTOK") {
 		return fmt.Errorf("create base vhdx: %v\n%s", err, out)
