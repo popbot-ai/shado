@@ -36,9 +36,14 @@ func shadowMountPath(p *Project, id string) string {
 }
 
 // createOneShadow makes a differencing child + folder mount and returns the record.
-func createOneShadow(p *Project, id string, main bool) (Shadow, error) {
+// mountOverride, when non-empty, mounts the clone at that exact path (e.g. a
+// caller's expected workspace path) instead of the default <ShadowsRoot>/<id>.
+func createOneShadow(p *Project, id string, main bool, mountOverride string) (Shadow, error) {
 	vhdx := shadowVhdxPath(p, id)
-	mount := shadowMountPath(p, id)
+	mount := mountOverride
+	if mount == "" {
+		mount = shadowMountPath(p, id)
+	}
 	_ = vhdxDismount(vhdx)
 	_ = os.Remove(vhdx)
 	if err := vhdxCreateDiff(vhdx, p.BaseVhdx); err != nil {
@@ -132,7 +137,7 @@ func cmdCreate(f flags, pos []string) {
 	ids := append([]string{"main"}, slotIDs(count)...)
 	for i, id := range ids {
 		info("creating shadow %q", id)
-		s, err := createOneShadow(p, id, i == 0)
+		s, err := createOneShadow(p, id, i == 0, "")
 		must(err)
 		p.Shadows = append(p.Shadows, s)
 	}
@@ -197,7 +202,7 @@ func cmdRecache(f flags) {
 	p.Shadows = nil
 	for _, s := range old {
 		info("recreating shadow %q", s.ID)
-		ns, err := createOneShadow(p, s.ID, s.Main)
+		ns, err := createOneShadow(p, s.ID, s.Main, s.Mount)
 		must(err)
 		p.Shadows = append(p.Shadows, ns)
 	}
@@ -255,7 +260,7 @@ func cmdCloneCreate(f flags) {
 		fail("slot %s already exists - use 'shado clone reset' to refresh it", slot)
 	}
 	info("adding shadow %q off base", slot)
-	s, err := createOneShadow(p, slot, false)
+	s, err := createOneShadow(p, slot, false, f.str("mount"))
 	must(err)
 	p.Shadows = append(p.Shadows, s)
 	must(saveReg(reg))
@@ -276,7 +281,7 @@ func cmdCloneReset(f flags) {
 	info("resetting shadow %q to clean warm base", slot)
 	_ = vhdxDismount(s.Vhdx)
 	_ = os.Remove(s.Vhdx)
-	ns, err := createOneShadow(p, slot, main)
+	ns, err := createOneShadow(p, slot, main, s.Mount)
 	must(err)
 	*s = ns
 	must(saveReg(reg))
