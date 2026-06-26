@@ -25,8 +25,10 @@ type Backend interface {
 	// p.BaseVhdx and p.SizeGB. sizeGB is an advisory max (0 = auto-size); it is
 	// only meaningful to image-based backends.
 	CreateBase(p *Project, warm string, sizeGB float64) error
-	// CreateShadow makes a writable COW view of p's base for id.
-	CreateShadow(p *Project, id string, main bool) (Shadow, error)
+	// CreateShadow makes a writable COW view of p's base for id. mountOverride,
+	// when non-empty, surfaces the clone at that exact path (e.g. a caller's
+	// expected workspace path) instead of the default <ShadowsRoot>/<id>.
+	CreateShadow(p *Project, id string, main bool, mountOverride string) (Shadow, error)
 	// RemoveShadow tears a shadow's COW storage + mount down.
 	RemoveShadow(s *Shadow) error
 	// ParkShadow detaches a shadow's mount but keeps its COW storage.

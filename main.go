@@ -17,7 +17,7 @@ Usage:
   shado create <warm-folder> --name N [--count C] [--size-gb G]
   shado recache --name N [--force]
   shado restore --name N [--to <folder>] [--force]
-  shado clone create  --name N --slot S [--hook CMD]
+  shado clone create  --name N --slot S [--mount PATH] [--hook CMD]
   shado clone reset   --name N --slot S
   shado clone park    --name N --slot S
   shado clone resume  --name N --slot S

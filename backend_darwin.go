@@ -88,8 +88,11 @@ func (b macBackend) CreateBase(p *Project, warm string, _ float64) error {
 	return nil
 }
 
-func (b macBackend) CreateShadow(p *Project, id string, main bool) (Shadow, error) {
-	mount := shadowMountPath(p, id)
+func (b macBackend) CreateShadow(p *Project, id string, main bool, mountOverride string) (Shadow, error) {
+	mount := mountOverride
+	if mount == "" {
+		mount = shadowMountPath(p, id)
+	}
 	if err := cloneTree(p.BaseVhdx, mount); err != nil {
 		return Shadow{}, err
 	}

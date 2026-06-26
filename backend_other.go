@@ -22,7 +22,7 @@ func (otherBackend) RequireReady() {
 
 func (otherBackend) BasePath(string) string                     { return "" }
 func (otherBackend) CreateBase(*Project, string, float64) error { return errUnsupported }
-func (otherBackend) CreateShadow(*Project, string, bool) (Shadow, error) {
+func (otherBackend) CreateShadow(*Project, string, bool, string) (Shadow, error) {
 	return Shadow{}, errUnsupported
 }
 func (otherBackend) RemoveShadow(*Shadow) error        { return errUnsupported }

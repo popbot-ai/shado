@@ -81,7 +81,7 @@ func cmdCreate(f flags, pos []string) {
 	ids := append([]string{"main"}, slotIDs(count)...)
 	for i, id := range ids {
 		info("creating shadow %q", id)
-		s, err := backend.CreateShadow(p, id, i == 0)
+		s, err := backend.CreateShadow(p, id, i == 0, "")
 		must(err)
 		p.Shadows = append(p.Shadows, s)
 	}
@@ -129,7 +129,7 @@ func cmdRecache(f flags) {
 	p.Shadows = nil
 	for _, s := range old {
 		info("recreating shadow %q", s.ID)
-		ns, err := backend.CreateShadow(p, s.ID, s.Main)
+		ns, err := backend.CreateShadow(p, s.ID, s.Main, s.Mount)
 		must(err)
 		p.Shadows = append(p.Shadows, ns)
 	}
@@ -178,7 +178,7 @@ func cmdCloneCreate(f flags) {
 		fail("slot %s already exists - use 'shado clone reset' to refresh it", slot)
 	}
 	info("adding shadow %q off base", slot)
-	s, err := backend.CreateShadow(p, slot, false)
+	s, err := backend.CreateShadow(p, slot, false, f.str("mount"))
 	must(err)
 	p.Shadows = append(p.Shadows, s)
 	must(saveReg(reg))
@@ -198,7 +198,7 @@ func cmdCloneReset(f flags) {
 	main := s.Main
 	info("resetting shadow %q to clean warm base", slot)
 	_ = backend.RemoveShadow(s)
-	ns, err := backend.CreateShadow(p, slot, main)
+	ns, err := backend.CreateShadow(p, slot, main, s.Mount)
 	must(err)
 	*s = ns
 	must(saveReg(reg))

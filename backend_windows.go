@@ -72,9 +72,12 @@ func (b winBackend) CreateBase(p *Project, warm string, sizeGB float64) error {
 	return nil
 }
 
-func (winBackend) CreateShadow(p *Project, id string, main bool) (Shadow, error) {
+func (winBackend) CreateShadow(p *Project, id string, main bool, mountOverride string) (Shadow, error) {
 	vhdx := shadowVhdxPath(p, id)
-	mount := shadowMountPath(p, id)
+	mount := mountOverride
+	if mount == "" {
+		mount = shadowMountPath(p, id)
+	}
 	_ = vhdxDismount(vhdx)
 	_ = os.Remove(vhdx)
 	if err := vhdxCreateDiff(vhdx, p.BaseVhdx); err != nil {

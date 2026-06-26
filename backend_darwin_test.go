@@ -37,11 +37,11 @@ func TestMacBackendLifecycle(t *testing.T) {
 		t.Fatal("base not created")
 	}
 
-	s1, err := b.CreateShadow(p, "1", false)
+	s1, err := b.CreateShadow(p, "1", false, "")
 	if err != nil {
 		t.Fatalf("CreateShadow 1: %v", err)
 	}
-	s2, err := b.CreateShadow(p, "2", false)
+	s2, err := b.CreateShadow(p, "2", false, "")
 	if err != nil {
 		t.Fatalf("CreateShadow 2: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestMacBackendLifecycle(t *testing.T) {
 	}
 
 	// recache: promote a freshly warmed main into the base, then shadows inherit it.
-	main, err := b.CreateShadow(p, "main", true)
+	main, err := b.CreateShadow(p, "main", true, "")
 	if err != nil {
 		t.Fatalf("CreateShadow main: %v", err)
 	}
@@ -86,11 +86,24 @@ func TestMacBackendLifecycle(t *testing.T) {
 	if err := b.Recache(p, &p.Shadows[0]); err != nil {
 		t.Fatalf("Recache: %v", err)
 	}
-	ns, err := b.CreateShadow(p, "1", false)
+	ns, err := b.CreateShadow(p, "1", false, "")
 	if err != nil {
 		t.Fatalf("CreateShadow after recache: %v", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(ns.Mount, "warmed.txt")); string(got) != "warm2" {
 		t.Fatalf("recached base missing warmed file: %q", got)
+	}
+
+	// mount override: the clone must surface at the caller-specified path.
+	override := filepath.Join(home, "custom", "slot-path")
+	os3, err := b.CreateShadow(p, "3", false, override)
+	if err != nil {
+		t.Fatalf("CreateShadow with override: %v", err)
+	}
+	if os3.Mount != override {
+		t.Fatalf("mount = %q, want override %q", os3.Mount, override)
+	}
+	if got, _ := os.ReadFile(filepath.Join(override, "sub", "a.txt")); string(got) != "warm" {
+		t.Fatalf("overridden mount missing base content: %q", got)
 	}
 }
