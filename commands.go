@@ -280,6 +280,7 @@ func cmdCloneReset(f flags) {
 	must(err)
 	*s = ns
 	must(saveReg(reg))
+	runHook(f.str("hook"), ns.Mount)
 	ok("shadow %s reset (clean + warm) at %s", slot, ns.Mount)
 }
 
@@ -310,6 +311,7 @@ func cmdCloneResume(f flags) {
 	must(vhdxMountFolder(s.Vhdx, s.Mount))
 	s.Parked = false
 	must(saveReg(reg))
+	runHook(f.str("hook"), s.Mount)
 	ok("shadow %s resumed at %s", slot, s.Mount)
 }
 

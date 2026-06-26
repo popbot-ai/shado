@@ -108,6 +108,20 @@ watcher behind the dirty-checks, and release packaging (Homebrew tap + Scoop buc
 via GoReleaser). A validated PowerShell reference of the core flow lives in
 [`prototype/`](prototype/).
 
+## Tests
+
+```sh
+go test ./...                              # unit tests (fast, no privileges) — also runs in CI
+powershell test\run-all.ps1                # full suite (unit + integration); run elevated
+powershell test\run-all.ps1 -SkipP4        # skip the Perforce integration test
+```
+
+- **Unit tests** (`*_test.go`) cover the registry, flag parsing, sizing, and path logic; CI runs `go vet` + `go build` + `go test` on Windows and Linux (`.github/workflows/ci.yml`).
+- **Integration tests** (need an elevated shell + Hyper-V — they create/mount real VHDX):
+  - `test/e2e.ps1` — base/clone/park/resume/reset/restore lifecycle + isolation
+  - `test/recache.ps1` — promote a warmed main into a new base and re-base every shadow
+  - `test/p4-init.ps1` — per-slot Perforce workspace via the `p4-init` hook (against a live P4 server)
+
 ## License
 
-[MIT](LICENSE) © 2026 Proof of Play, Inc.
+[MIT](LICENSE) © 2026 Benjamin Cooley

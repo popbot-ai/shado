@@ -83,7 +83,7 @@ scoops:
 chocolateys:
   - name: shado
     title: shado
-    authors: Proof of Play, Inc.
+    authors: Benjamin Cooley
     summary: "Instant copy-on-write workspaces for very large projects"
     description: |
       shado creates instant copy-on-write "shadow" workspaces off a frozen base,
@@ -93,7 +93,7 @@ chocolateys:
     docs_url: "https://github.com/popbot-ai/shado/blob/main/README.md"
     bug_tracker_url: "https://github.com/popbot-ai/shado/issues"
     license_url: "https://github.com/popbot-ai/shado/blob/main/LICENSE"
-    copyright: "2026 Proof of Play, Inc."
+    copyright: "2026 Benjamin Cooley"
     tags: "copy-on-write workspace vhdx perforce game-dev cli"
     release_notes: "https://github.com/popbot-ai/shado/releases/tag/{{ .Tag }}"
     api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
@@ -127,7 +127,7 @@ winget:
 nfpms:
   - id: packages
     package_name: shado
-    vendor: Proof of Play, Inc.
+    vendor: Benjamin Cooley
     homepage: "https://github.com/popbot-ai/shado"
     maintainer: "Ben Cooley <benjcooley@gmail.com>"
     description: "Instant copy-on-write workspaces for very large projects"
