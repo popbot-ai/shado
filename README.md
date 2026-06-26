@@ -99,6 +99,12 @@ shado ls        # inspect bases + shadows
 
 Full reference: [`man shado`](docs/shado.1) (also `docs/shado.1`).
 
+## Architecture
+
+How it's built — the data model, the platform-neutral command layer, and the
+per-OS copy-on-write backends (Windows VHDX, macOS APFS `clonefile`) behind a
+single `Backend` interface: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Status
 
 Early. The command surface is locked, and both the Windows VHDX backend and the
