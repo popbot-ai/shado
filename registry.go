@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // Shadow is one writable copy-on-write view of a base, surfaced as a folder.
@@ -34,11 +35,33 @@ func shadoHome() string {
 	if h := os.Getenv("SHADO_HOME"); h != "" {
 		return h
 	}
-	pd := os.Getenv("ProgramData")
-	if pd == "" {
-		pd = `C:\ProgramData`
+	return defaultShadoHome()
+}
+
+// defaultShadoHome is the per-OS store root when SHADO_HOME is unset. Windows
+// uses the machine-wide ProgramData (mounts there are visible to all sessions);
+// macOS/Linux keep clones under the user's home (no elevation needed).
+func defaultShadoHome() string {
+	switch runtime.GOOS {
+	case "windows":
+		pd := os.Getenv("ProgramData")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "shado")
+	case "darwin":
+		if h, err := os.UserHomeDir(); err == nil && h != "" {
+			return filepath.Join(h, "Library", "Application Support", "shado")
+		}
+	default: // linux and other unixes
+		if x := os.Getenv("XDG_DATA_HOME"); x != "" {
+			return filepath.Join(x, "shado")
+		}
+		if h, err := os.UserHomeDir(); err == nil && h != "" {
+			return filepath.Join(h, ".local", "share", "shado")
+		}
 	}
-	return filepath.Join(pd, "shado")
+	return filepath.Join(os.TempDir(), "shado")
 }
 
 func storeDir() string { return filepath.Join(shadoHome(), "store") }

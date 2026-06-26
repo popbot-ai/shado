@@ -44,7 +44,7 @@ func parseFlags(args []string) (flags, []string) {
 	return f, pos
 }
 
-func (f flags) has(k string) bool { _, ok := f[k]; return ok }
+func (f flags) has(k string) bool   { _, ok := f[k]; return ok }
 func (f flags) str(k string) string { return f[k] }
 func (f flags) need(k string) string {
 	v, ok := f[k]
@@ -103,18 +103,8 @@ func nz(s, def string) string {
 	}
 	return s
 }
-func trimLine(s string) string { return strings.TrimSpace(s) }
+func trimLine(s string) string         { return strings.TrimSpace(s) }
 func jsonIndent(v any) ([]byte, error) { return json.MarshalIndent(v, "", "  ") }
-
-func isAdmin() bool {
-	out, err := runPS(`[bool](([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrators'))`)
-	return err == nil && strings.Contains(strings.ToLower(out), "true")
-}
-func requireAdmin() {
-	if !isAdmin() {
-		fail("this operation needs an elevated shell (Run as administrator). See 'shado doctor'.")
-	}
-}
 
 func dirSizeBytes(root string) int64 {
 	var total int64
@@ -126,14 +116,6 @@ func dirSizeBytes(root string) int64 {
 	})
 	return total
 }
-func sizeOf(p string) string {
-	fi, err := os.Stat(p)
-	if err != nil {
-		return "(missing)"
-	}
-	return fmt.Sprintf("%.0f MB", float64(fi.Size())/(1024*1024))
-}
-
 func humanBytes(n int64) string {
 	const unit = 1024.0
 	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}

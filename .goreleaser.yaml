@@ -4,9 +4,9 @@
 # Release flow: push a tag (e.g. `git tag v0.1.0 && git push --tags`); the GitHub
 # Actions workflow (.github/workflows/release.yml) runs `goreleaser release`.
 #
-# NOTE: the darwin/linux backends are not implemented yet (Windows VHDX only), so
-# those binaries currently build and run `doctor`/`version`/help but report an
-# unsupported backend for create/clone until APFS clonefile / reflink land.
+# NOTE: Windows (VHDX) and macOS (APFS clonefile) backends are implemented. The
+# linux binary still builds and runs `doctor`/`version`/help but reports an
+# unsupported backend for create/clone until the reflink/overlayfs backend lands.
 version: 2
 
 project_name: shado

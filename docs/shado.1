@@ -106,7 +106,8 @@ VirtDisk API. Privileged operations require elevation.
 .B macOS
 APFS
 .B clonefile
-copy\-on\-write clones.
+copy\-on\-write clones (\fBcp -c\fR). No elevation required; a frozen base is a
+read\-only directory and each shadow is an instant clone of it.
 .TP
 .B Linux
 btrfs / XFS
@@ -117,9 +118,11 @@ copies (\fBcp --reflink\fR) or overlayfs.
 .B $SHADO_HOME
 Base store and registry. Defaults to
 .B %ProgramData%\\shado
-on Windows and
+on Windows,
+.B ~/Library/Application Support/shado
+on macOS, and
 .B ~/.local/share/shado
-on macOS/Linux.
+(or \fB$XDG_DATA_HOME/shado\fR) on Linux.
 .SH EXAMPLES
 .PP
 Set up eight warm shadows from a synced+built Unreal tree:

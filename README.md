@@ -46,7 +46,7 @@ Same commands everywhere; the copy-on-write backend is per-OS:
 | OS | Backend | Notes |
 |---|---|---|
 | **Windows** | Differencing **VHDX** (VirtDisk API) | implemented; needs elevation for mounts |
-| **macOS** | APFS **`clonefile`** | planned |
+| **macOS** | APFS **`clonefile`** (`cp -c`) | implemented; no elevation required |
 | **Linux** | btrfs/XFS **reflink** (`cp --reflink`) / overlayfs | planned |
 
 ## Install
@@ -101,12 +101,12 @@ Full reference: [`man shado`](docs/shado.1) (also `docs/shado.1`).
 
 ## Status
 
-Early. The command surface is locked and the Windows VHDX backend is proven
-(differencing base + simultaneous isolated shadows + instant reset). In progress:
-the Go implementation of the locked surface, the macOS/Linux backends, the folder
-watcher behind the dirty-checks, and release packaging (Homebrew tap + Scoop bucket
-via GoReleaser). A validated PowerShell reference of the core flow lives in
-[`prototype/`](prototype/).
+Early. The command surface is locked, and both the Windows VHDX backend and the
+macOS APFS `clonefile` backend are implemented (frozen base + simultaneous
+isolated shadows + instant reset/recache/restore). In progress: the Linux
+reflink/overlayfs backend, the folder watcher behind the dirty-checks, and
+release packaging (Homebrew tap + Scoop bucket via GoReleaser). A validated
+PowerShell reference of the core flow lives in [`prototype/`](prototype/).
 
 ## Tests
 

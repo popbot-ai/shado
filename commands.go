@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -25,7 +23,7 @@ func resolve(reg *Registry, f flags) *Project {
 }
 
 func shadowDirty(s *Shadow) bool {
-	return vhdxSize(s.Vhdx) > s.CleanSize+dirtyMarginBytes
+	return backend.ShadowDiskUsage(s) > s.CleanSize+dirtyMarginBytes
 }
 
 func shadowVhdxPath(p *Project, id string) string {
@@ -35,50 +33,20 @@ func shadowMountPath(p *Project, id string) string {
 	return filepath.Join(p.ShadowsRoot, id)
 }
 
-// createOneShadow makes a differencing child + folder mount and returns the record.
-func createOneShadow(p *Project, id string, main bool) (Shadow, error) {
-	vhdx := shadowVhdxPath(p, id)
-	mount := shadowMountPath(p, id)
-	_ = vhdxDismount(vhdx)
-	_ = os.Remove(vhdx)
-	if err := vhdxCreateDiff(vhdx, p.BaseVhdx); err != nil {
-		return Shadow{}, err
-	}
-	if err := vhdxMountFolder(vhdx, mount); err != nil {
-		return Shadow{}, err
-	}
-	return Shadow{ID: id, Mount: mount, Vhdx: vhdx, CleanSize: vhdxSize(vhdx), Main: main}, nil
-}
-
-func runHook(hook, mount string) {
-	if hook == "" {
-		return
-	}
-	info("  running hook: %s", hook)
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", hook)
-	cmd.Env = append(os.Environ(), "SHADO_MOUNT="+mount)
-	hideConsole(cmd)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("  hook failed: %v\n%s\n", err, string(out))
-	} else if verbose && len(out) > 0 {
-		os.Stdout.Write(out)
-	}
-}
-
 // ============================ commands ============================
 
 func cmdDoctor() {
 	fmt.Println("shado doctor")
 	ready := true
-	admin := isAdmin()
-	fmt.Printf("  %-22s %s\n", "elevated (admin):", yn(admin, "yes", "NO  - privileged ops will fail"))
-	if !admin {
+	fmt.Printf("  %-22s %s\n", "backend:", backend.Name())
+	priv := backend.Privileged()
+	fmt.Printf("  %-22s %s\n", "privileges:", yn(priv, "yes", "NO  - privileged ops will fail"))
+	if !priv {
 		ready = false
 	}
-	hv := hyperVAvailable()
-	fmt.Printf("  %-22s %s\n", "VHDX backend:", yn(hv, "yes (Hyper-V cmdlets)", "NO  - enable Microsoft-Hyper-V-All + reboot"))
-	if !hv {
+	bok, detail := backend.Ready()
+	fmt.Printf("  %-22s %s\n", "COW backend:", yn(bok, "yes ("+detail+")", "NO  - "+detail))
+	if !bok {
 		ready = false
 	}
 	fmt.Printf("  %-22s %s\n", "SHADO_HOME:", shadoHome())
@@ -87,7 +55,7 @@ func cmdDoctor() {
 }
 
 func cmdCreate(f flags, pos []string) {
-	requireAdmin()
+	backend.RequireReady()
 	must(ensureHome())
 	if len(pos) < 1 {
 		fail("usage: shado create <warm-folder> --name <n> [--count C] [--size-gb G]")
@@ -103,36 +71,17 @@ func cmdCreate(f flags, pos []string) {
 		fail("project %q already exists", name)
 	}
 
-	sizeGB := f.float("size-gb", 0)
-	if sizeGB == 0 {
-		sizeGB = float64(dirSizeBytes(warm))/float64(1<<30)*1.4 + 2 // content * 1.4 + headroom
-	}
-	sizeGB = math.Ceil(sizeGB)             // whole GB => MB-aligned, valid for New-VHD
-	sizeBytes := int64(sizeGB) * (1 << 30) // virtual max; dynamic VHDX only allocates what's used
-	baseVhdx := filepath.Join(storeDir(), name+"-base.vhdx")
-	if fileExists(baseVhdx) {
-		fail("%s already on disk", baseVhdx)
-	}
-
-	info("creating base for %q (%.0f GB max) from %s", name, sizeGB, warm)
-	baseBuild := filepath.Join(storeDir(), "_build-"+name)
-	must(vhdxCreateBase(baseVhdx, sizeBytes, "shado-"+name, baseBuild))
-	info("copying warm folder into base ...")
-	must(robocopyMirror(warm, baseBuild))
-	info("freezing base read-only")
-	must(vhdxFreeze(baseVhdx))
-	_ = os.RemoveAll(baseBuild)
-
 	shadowsRoot := f.str("shadows-root")
 	if shadowsRoot == "" {
 		shadowsRoot = filepath.Join(shadoHome(), "shadows", name)
 	}
-	p := &Project{Name: name, OriginalFolder: warm, BaseVhdx: baseVhdx, SizeGB: sizeGB, ShadowsRoot: shadowsRoot}
+	p := &Project{Name: name, OriginalFolder: warm, ShadowsRoot: shadowsRoot}
+	must(backend.CreateBase(p, warm, f.float("size-gb", 0)))
 
 	ids := append([]string{"main"}, slotIDs(count)...)
 	for i, id := range ids {
 		info("creating shadow %q", id)
-		s, err := createOneShadow(p, id, i == 0)
+		s, err := backend.CreateShadow(p, id, i == 0)
 		must(err)
 		p.Shadows = append(p.Shadows, s)
 	}
@@ -151,7 +100,7 @@ func slotIDs(count int) []string {
 }
 
 func cmdRecache(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	main := p.mainShadow()
@@ -172,32 +121,15 @@ func cmdRecache(f flags) {
 		}
 	}
 
-	info("promoting warmed main into a new base (flatten) ...")
-	newBase := filepath.Join(storeDir(), p.Name+"-base.new.vhdx")
-	_ = vhdxDismount(main.Vhdx)
-	_ = os.Remove(newBase)
-	must(vhdxConvert(main.Vhdx, newBase))
-	must(vhdxFreeze(newBase))
-
-	// tear down all shadows + old base
-	for i := range p.Shadows {
-		_ = vhdxDismount(p.Shadows[i].Vhdx)
-		_ = os.Remove(p.Shadows[i].Vhdx)
-	}
-	_ = vhdxUnfreeze(p.BaseVhdx)
-	oldBase := p.BaseVhdx
-	_ = os.Remove(oldBase)
-
-	// swap base, recreate every shadow fresh
-	finalBase := filepath.Join(storeDir(), p.Name+"-base.vhdx")
-	must(os.Rename(newBase, finalBase))
-	p.BaseVhdx = finalBase
+	// backend promotes the warmed main into a fresh frozen base and tears down
+	// every shadow; we then recreate each one off the new base.
+	must(backend.Recache(p, main))
 
 	old := p.Shadows
 	p.Shadows = nil
 	for _, s := range old {
 		info("recreating shadow %q", s.ID)
-		ns, err := createOneShadow(p, s.ID, s.Main)
+		ns, err := backend.CreateShadow(p, s.ID, s.Main)
 		must(err)
 		p.Shadows = append(p.Shadows, ns)
 	}
@@ -206,7 +138,7 @@ func cmdRecache(f flags) {
 }
 
 func cmdRestore(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	if !f.has("force") {
@@ -218,26 +150,17 @@ func cmdRestore(f flags) {
 	}
 	// remove shadows
 	for i := range p.Shadows {
-		_ = vhdxDismount(p.Shadows[i].Vhdx)
-		_ = os.Remove(p.Shadows[i].Vhdx)
-		_ = os.RemoveAll(p.Shadows[i].Mount)
+		_ = backend.RemoveShadow(&p.Shadows[i])
 	}
 	// copy base contents back to the original folder
 	dest := nz(f.str("to"), p.OriginalFolder)
 	if dest != "" {
 		info("restoring base contents to %s ...", dest)
-		_ = vhdxUnfreeze(p.BaseVhdx)
-		tmp := filepath.Join(storeDir(), "_restore-"+p.Name)
-		if err := vhdxMountFolder(p.BaseVhdx, tmp); err == nil {
-			_ = robocopyMirror(tmp, dest)
-			_ = vhdxDismount(p.BaseVhdx)
-			_ = os.RemoveAll(tmp)
-		} else {
-			fmt.Printf("  could not remount base to copy out: %v\n", err)
+		if err := backend.ExportBase(p, dest); err != nil {
+			fmt.Printf("  could not copy base out: %v\n", err)
 		}
 	}
-	_ = vhdxUnfreeze(p.BaseVhdx)
-	_ = os.Remove(p.BaseVhdx)
+	_ = backend.DestroyBase(p)
 	_ = os.RemoveAll(p.ShadowsRoot)
 	reg.removeProject(p.Name)
 	must(saveReg(reg))
@@ -247,7 +170,7 @@ func cmdRestore(f flags) {
 // ---- clone family ----
 
 func cmdCloneCreate(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	slot := f.need("slot")
@@ -255,7 +178,7 @@ func cmdCloneCreate(f flags) {
 		fail("slot %s already exists - use 'shado clone reset' to refresh it", slot)
 	}
 	info("adding shadow %q off base", slot)
-	s, err := createOneShadow(p, slot, false)
+	s, err := backend.CreateShadow(p, slot, false)
 	must(err)
 	p.Shadows = append(p.Shadows, s)
 	must(saveReg(reg))
@@ -264,7 +187,7 @@ func cmdCloneCreate(f flags) {
 }
 
 func cmdCloneReset(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	slot := f.need("slot")
@@ -274,9 +197,8 @@ func cmdCloneReset(f flags) {
 	}
 	main := s.Main
 	info("resetting shadow %q to clean warm base", slot)
-	_ = vhdxDismount(s.Vhdx)
-	_ = os.Remove(s.Vhdx)
-	ns, err := createOneShadow(p, slot, main)
+	_ = backend.RemoveShadow(s)
+	ns, err := backend.CreateShadow(p, slot, main)
 	must(err)
 	*s = ns
 	must(saveReg(reg))
@@ -285,7 +207,7 @@ func cmdCloneReset(f flags) {
 }
 
 func cmdClonePark(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	slot := f.need("slot")
@@ -293,14 +215,14 @@ func cmdClonePark(f flags) {
 	if s == nil {
 		fail("no shadow in slot %s", slot)
 	}
-	must(vhdxDismount(s.Vhdx))
+	must(backend.ParkShadow(s))
 	s.Parked = true
 	must(saveReg(reg))
 	ok("shadow %s parked (diff kept, unmounted)", slot)
 }
 
 func cmdCloneResume(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	slot := f.need("slot")
@@ -308,7 +230,7 @@ func cmdCloneResume(f flags) {
 	if s == nil {
 		fail("no shadow in slot %s", slot)
 	}
-	must(vhdxMountFolder(s.Vhdx, s.Mount))
+	must(backend.ResumeShadow(s))
 	s.Parked = false
 	must(saveReg(reg))
 	runHook(f.str("hook"), s.Mount)
@@ -316,7 +238,7 @@ func cmdCloneResume(f flags) {
 }
 
 func cmdCloneRm(f flags) {
-	requireAdmin()
+	backend.RequireReady()
 	reg := mustReg()
 	p := resolve(reg, f)
 	slot := f.need("slot")
@@ -330,9 +252,7 @@ func cmdCloneRm(f flags) {
 	if !f.has("force") && shadowDirty(s) {
 		fail("shadow %s has changes; commit/shelve first or pass --force", slot)
 	}
-	_ = vhdxDismount(s.Vhdx)
-	_ = os.Remove(s.Vhdx)
-	_ = os.RemoveAll(s.Mount)
+	_ = backend.RemoveShadow(s)
 	p.removeShadow(slot)
 	must(saveReg(reg))
 	ok("shadow %s removed", slot)
@@ -347,8 +267,9 @@ func cmdLs() {
 		return
 	}
 	for _, p := range reg.Projects {
-		fmt.Printf("PROJECT %s   base=%s (%s)\n", p.Name, sizeOf(p.BaseVhdx), p.BaseVhdx)
-		for _, s := range p.Shadows {
+		fmt.Printf("PROJECT %s   base=%s (%s)\n", p.Name, humanBytes(backend.DiskUsage(p.BaseVhdx)), p.BaseVhdx)
+		for i := range p.Shadows {
+			s := &p.Shadows[i]
 			tag := ""
 			if s.Main {
 				tag = " [main]"
@@ -357,10 +278,10 @@ func cmdLs() {
 				tag += " [parked]"
 			}
 			dirty := ""
-			if shadowDirty(&s) {
+			if shadowDirty(s) {
 				dirty = " *dirty*"
 			}
-			fmt.Printf("  %-6s mount=%-28s diff=%-9s%s%s\n", s.ID, s.Mount, sizeOf(s.Vhdx), tag, dirty)
+			fmt.Printf("  %-6s mount=%-28s diff=%-9s%s%s\n", s.ID, s.Mount, humanBytes(backend.ShadowReportedSize(s)), tag, dirty)
 		}
 	}
 }
@@ -384,26 +305,29 @@ func cmdDu(f flags) {
 	var grand int64
 	for _, p := range projects {
 		fmt.Printf("PROJECT %s\n", p.Name)
-		baseSz := vhdxSize(p.BaseVhdx)
+		baseSz := backend.DiskUsage(p.BaseVhdx)
 		fmt.Printf("  %-16s %12s   (shared, read-only)\n", "base", humanBytes(baseSz))
 
 		var mainSz, slotSz int64
 		var slots int
-		for _, s := range p.Shadows {
+		for i := range p.Shadows {
+			s := &p.Shadows[i]
 			if !s.Main {
 				continue
 			}
-			mainSz += vhdxSize(s.Vhdx)
-			fmt.Printf("  %-16s %12s%s\n", "main clone", humanBytes(vhdxSize(s.Vhdx)), parkedTag(s))
+			sz := backend.ShadowReportedSize(s)
+			mainSz += sz
+			fmt.Printf("  %-16s %12s%s\n", "main clone", humanBytes(sz), parkedTag(*s))
 		}
-		for _, s := range p.Shadows {
+		for i := range p.Shadows {
+			s := &p.Shadows[i]
 			if s.Main {
 				continue
 			}
-			sz := vhdxSize(s.Vhdx)
+			sz := backend.ShadowReportedSize(s)
 			slotSz += sz
 			slots++
-			fmt.Printf("  %-16s %12s%s\n", "slot "+s.ID, humanBytes(sz), parkedTag(s))
+			fmt.Printf("  %-16s %12s%s\n", "slot "+s.ID, humanBytes(sz), parkedTag(*s))
 		}
 		fmt.Println("  " + strings.Repeat("-", 30))
 		fmt.Printf("  %-16s %12s   (%d clone(s))\n", "slot clones", humanBytes(slotSz), slots)
