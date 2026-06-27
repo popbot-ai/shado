@@ -69,6 +69,9 @@ func main() {
 	case "restore":
 		f, _ := parseFlags(args[1:])
 		cmdRestore(f)
+	case "remount":
+		f, _ := parseFlags(args[1:])
+		cmdRemount(f)
 	case "clone":
 		if len(args) < 2 {
 			fail("usage: shado clone <create|reset|park|resume|rm> --slot S")

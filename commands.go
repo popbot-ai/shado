@@ -265,6 +265,30 @@ func cmdCloneRm(f flags) {
 	ok("shadow %s removed", slot)
 }
 
+// cmdRemount re-attaches EVERY shadow of a project. Windows VHDX mounts don't
+// survive a reboot, so after a restart the registry still lists the clones but
+// their mount folders are empty. This brings them all back in one elevated
+// call (idempotent — ResumeShadow is a no-op for an already-mounted clone).
+// Per-shadow failures are reported but don't abort the rest.
+func cmdRemount(f flags) {
+	backend.RequireReady()
+	reg := mustReg()
+	p := resolve(reg, f)
+	mounted, failed := 0, 0
+	for i := range p.Shadows {
+		s := &p.Shadows[i]
+		if err := backend.ResumeShadow(s); err != nil {
+			fmt.Printf("  slot %s: %v\n", s.ID, err)
+			failed++
+			continue
+		}
+		s.Parked = false
+		mounted++
+	}
+	must(saveReg(reg))
+	ok("remounted %d shadow(s) for %q (%d failed)", mounted, p.Name, failed)
+}
+
 // ---- inspection ----
 
 func cmdLs() {
