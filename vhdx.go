@@ -96,8 +96,12 @@ if (-not $has) {
       Remove-PartitionAccessPath -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -AccessPath $ap -ErrorAction SilentlyContinue
     }
   }
-  # clear any stale mount-point reparse left at the target, then (re)create it empty
-  if (Test-Path $target) { Remove-Item $target -Force -ErrorAction SilentlyContinue }
+  # Remove any leftover mount-point folder WITHOUT following it into the volume.
+  # A BROKEN mount point (its VHDX detached on reboot) makes Test-Path/Remove-Item
+  # error or recurse into the dead volume — so they leave the stale reparse in
+  # place and the Add-PartitionAccessPath below then fails. rmdir removes the
+  # reparse directory entry itself; then re-create the target empty.
+  cmd /c rmdir "$target" 2>$null
   New-Item -ItemType Directory -Path $target -Force | Out-Null
   Add-PartitionAccessPath -DiskNumber $disk.Number -PartitionNumber $part.PartitionNumber -AccessPath $target
 }
