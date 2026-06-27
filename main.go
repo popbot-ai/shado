@@ -14,7 +14,7 @@ func usage() {
 	fmt.Print(`shado - instant copy-on-write workspaces for very large projects
 
 Usage:
-  shado create <warm-folder> --name N [--count C] [--size-gb G]
+  shado create <warm-folder> --name N [--count C] [--size-gb G] [--no-main]
   shado recache --name N [--force]
   shado restore --name N [--to <folder>] [--force]
   shado clone create  --name N --slot S [--mount PATH] [--hook CMD]

@@ -58,7 +58,7 @@ func cmdCreate(f flags, pos []string) {
 	backend.RequireReady()
 	must(ensureHome())
 	if len(pos) < 1 {
-		fail("usage: shado create <warm-folder> --name <n> [--count C] [--size-gb G]")
+		fail("usage: shado create <warm-folder> --name <n> [--count C] [--size-gb G] [--no-main]")
 	}
 	warm := pos[0]
 	if !fileExists(warm) {
@@ -78,10 +78,17 @@ func cmdCreate(f flags, pos []string) {
 	p := &Project{Name: name, OriginalFolder: warm, ShadowsRoot: shadowsRoot}
 	must(backend.CreateBase(p, warm, f.float("size-gb", 0)))
 
-	ids := append([]string{"main"}, slotIDs(count)...)
-	for i, id := range ids {
+	// --no-main: skip the default primary "main" clone. Callers that drive
+	// their own slot clones (e.g. PopBot, which uses the original folder as the
+	// live workspace) don't want an unused main shadow eating disk.
+	var ids []string
+	if !f.has("no-main") {
+		ids = append(ids, "main")
+	}
+	ids = append(ids, slotIDs(count)...)
+	for _, id := range ids {
 		info("creating shadow %q", id)
-		s, err := backend.CreateShadow(p, id, i == 0, "")
+		s, err := backend.CreateShadow(p, id, id == "main", "")
 		must(err)
 		p.Shadows = append(p.Shadows, s)
 	}
