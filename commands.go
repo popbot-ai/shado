@@ -159,8 +159,13 @@ func cmdRestore(f flags) {
 	for i := range p.Shadows {
 		_ = backend.RemoveShadow(&p.Shadows[i])
 	}
-	// copy base contents back to the original folder
-	dest := nz(f.str("to"), p.OriginalFolder)
+	// copy base contents back to the original folder — UNLESS --no-export,
+	// e.g. a repo delete that only wants to reclaim disk (the original p4/git
+	// folder is left in place, so re-exporting the base over it is pointless).
+	dest := ""
+	if !f.has("no-export") {
+		dest = nz(f.str("to"), p.OriginalFolder)
+	}
 	if dest != "" {
 		info("restoring base contents to %s ...", dest)
 		if err := backend.ExportBase(p, dest); err != nil {
